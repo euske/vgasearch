@@ -391,30 +391,6 @@ WORD = re.compile(r'\w+\s*|\S+\s*', re.U)
 def getwords(x):
     return WORD.findall(x)
 
-# unentify(x): decodes HTML entities to original text.
-UNENTIFY = re.compile(ur'&([^;]+);')
-def unentify(x):
-    from htmlentitydefs import name2codepoint
-    def f(m):
-        k = m.group(1)
-        if k.startswith('#x'):
-            try:
-                c = int(k[2:], 16)
-            except ValueError:
-                return u''
-        elif k.startswith('#'):
-            try:
-                c = int(k[1:])
-            except ValueError:
-                return u''
-        else:
-            try:
-                c = name2codepoint[k]
-            except KeyError:
-                return k
-        return unichr(c)
-    return UNENTIFY.sub(f, x)
-
 # highlight(pat, text): highlights text that matches a given pattern.
 def highlight(pat, text, context=10, fmt='<span class=h>%s</span>', mid='...'):
     i0 = 0
@@ -495,7 +471,6 @@ class VGAForumSearchApp(WebApp):
         for (docid,pid) in docids:
             cur.execute('SELECT text FROM content WHERE docid = ?;', (docid,))
             (text,) = cur.fetchone()
-            text = unentify(text)
             cur.execute('SELECT topic.title, topic.url, post.pid, '
                         'post.page, post.date, post.username '
                         'FROM post, topic '
@@ -504,7 +479,6 @@ class VGAForumSearchApp(WebApp):
             (title,url,pid,page,date,username) = cur.fetchone()
             if page != 1:
                 url = urlparse.urljoin(url, 'page/%d' % page)
-            title = unentify(title)
             date = time.strftime('%F', time.gmtime(date))
             pat = '|'.join( re.escape(w) for w in getwords(q) )
             pat = re.compile(r'(%s)\s*' % pat, re.I)
