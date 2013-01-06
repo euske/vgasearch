@@ -386,6 +386,11 @@ def main(app, argv):
 ##  VGA Forum Search
 ##
 
+# getwords(x): get words
+WORD = re.compile(r'\w+\s*|\S+\s*', re.U)
+def getwords(x):
+    return WORD.findall(x)
+
 # unentify(x): decodes HTML entities to original text.
 UNENTIFY = re.compile(ur'&([^;]+);')
 def unentify(x):
@@ -411,22 +416,23 @@ def unentify(x):
     return UNENTIFY.sub(f, x)
 
 # highlight(pat, text): highlights text that matches a given pattern.
-def highlight(pat, text, context=10, fmt='<span class=h>%s</span>'):
+def highlight(pat, text, context=10, fmt='<span class=h>%s</span>', mid='...'):
     i0 = 0
     r = u''
     def left(s):
-        words = s.split(' ')
-        return '...'+' '.join(words[-context:])
+        words = getwords(s)
+        return mid+''.join(words[-context:])
     def center(s):
-        words = s.split(' ')
-        return ' '.join(words[:context])+'...'+' '.join(words[-context:])
+        words = getwords(s)
+        return ''.join(words[:context])+mid+''.join(words[-context:])
     def right(s):
-        words = s.split(' ')
-        return ' '.join(words[:context])+'...'
+        words = getwords(s)
+        return ''.join(words[:context])+mid
     shorten = left
     for m in pat.finditer(text):
         i1 = m.start(0)
-        r += q(shorten(text[i0:i1]))
+        if i0 < i1:
+            r += q(shorten(text[i0:i1]))
         shorten = center
         r += fmt % q(m.group(0))
         i0 = m.end(0)
@@ -470,9 +476,10 @@ class VGAForumSearchApp(WebApp):
         yield ('<html><body>'
                '<style><!--\n'
                '.nav { font-size: 80%; }'
-               '.date { color: green; }'
                '.title { font-weight: bold; }'
+               '.date { font-size: 80%; color: green; }'
                '.username { font-weight: bold; }'
+               '.text { font-size: 80%; margin-left: 30px; }'
                '.h { font-weight: bold; color: red; }'
                '--></style>\n')
         docids = cur.fetchall()
@@ -484,7 +491,7 @@ class VGAForumSearchApp(WebApp):
             docids = docids[:self.maxdocs]
             yield Template('(Only $(maxdocs) posts are displayed.)',
                            maxdocs=self.maxdocs)
-        yield '<ol>'
+        yield '<hr><ol>'
         for (docid,pid) in docids:
             cur.execute('SELECT text FROM content WHERE docid = ?;', (docid,))
             (text,) = cur.fetchone()
@@ -498,18 +505,19 @@ class VGAForumSearchApp(WebApp):
             if page != 1:
                 url = urlparse.urljoin(url, 'page/%d' % page)
             title = unentify(title)
-            date = time.strftime('%F %H:%M', time.gmtime(date))
-            pat = re.compile('|'.join( re.escape(w) for w in q.split(' ') ), re.I)
+            date = time.strftime('%F', time.gmtime(date))
+            pat = '|'.join( re.escape(w) for w in getwords(q) )
+            pat = re.compile(r'(%s)\s*' % pat, re.I)
             text = highlight(pat, text)
             yield Template(
                 '<li> '
                 '<span class=title><a href="$(url)#post-$(pid)">$(title)</a></span> '
                 '<span class=date>$(date)</span> '
-                '<span class=username>$(username)</span> '
-                '$<text>\n',
+                'by <span class=username>$(username)</span> '
+                '<div class=text>$<text></div>\n',
                 docid=docid, text=text, url=url, title=title,
                 pid=pid, username=username, date=date)
-        yield '</ol>'
+        yield '</ol><hr>'
         yield ('<div class=nav><a href="/">back</a></div>'
                '</body></html>')
         return
