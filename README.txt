@@ -11,7 +11,7 @@ You need:
 
 Usage: 
  1. Run a crawler.
-    $ python crawl.py vgaforum.db http://videogamesawesome.com/forums/
+    $ python crawl.py -n vgaforum.db http://videogamesawesome.com/forums/forum/minecraft/
 
  2. Copy vgaforum.db to the same directory with app.py
 
