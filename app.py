@@ -282,6 +282,7 @@ class WebApp(object):
         path = environ.get('PATH_INFO', '/')
         fp = environ.get('wsgi.input')
         fields = cgi.FieldStorage(fp=fp, environ=environ)
+        result = None
         for attr in dir(self):
             router = getattr(self, attr)
             if not isinstance(router, Router): continue
@@ -308,9 +309,9 @@ class WebApp(object):
                 elif self.debug:
                     result = [InternalError()]
             break
-        else:
+        if result is None:
             result = self.get_default(path, fields, environ)
-        if not iterable(result):
+        elif not iterable(result):
             result = [result]
         for obj in result:
             if isinstance(obj, Response):
@@ -419,81 +420,84 @@ def highlight(pat, text, context=10, fmt='<span class=h>%s</span>', mid='...'):
 class VGAForumSearchApp(WebApp):
 
     dbpath = 'vgaforum.db'
+    maxquerylength = 30
     maxdocs = 100
-    
+
     @GET('/')
-    def index(self):
+    def index(self, q=''):
         # initial page.
-        yield Response()
-        yield (
-            '<h1>VGA Forum Search</h1>'
-            '<p><a href="http://videogamesawesome.com/forums/">back</a>'
-            '<form action="/search"><p>Search text: '
-            '<input name=q size="30"> '
-            '<input type=submit>'
-            '</form>\n')
-        return
-    
-    @GET('/search')
-    def search(self, q):
-        # search result page.
         import sqlite3
         import urlparse
         import time
-        conn = sqlite3.connect(self.dbpath)
-        cur = conn.cursor()
-        cur.execute('SELECT doc.docid, post.pid '
-                    'FROM content,doc,post '
-                    'WHERE content.text MATCH ? '
-                    'AND content.docid = doc.docid '
-                    'AND doc.pid = post.pid '
-                    'ORDER BY post.date DESC;', (q,))
         yield Response()
-        yield ('<html><body>'
+        yield ('<html><body>\n'
                '<style><!--\n'
-               '.nav { font-size: 80%; }'
-               '.title { font-weight: bold; }'
-               '.date { font-size: 80%; color: green; }'
-               '.username { font-weight: bold; }'
-               '.text { font-size: 80%; margin-left: 30px; }'
-               '.h { font-weight: bold; color: red; }'
+               '.title { font-weight: bold; }\n'
+               '.date { font-size: 80%; color: green; }\n'
+               '.username { font-weight: bold; }\n'
+               '.error { font-weight: bold; color: red; }\n'
+               '.text { font-size: 80%; margin-left: 2em; '
+               '  margin-top: 0.5em; margin-bottom: 0.5em; }\n'
+               '.h { font-weight: bold; color: red; }\n'
                '--></style>\n')
-        docids = cur.fetchall()
-        yield Template('<h1>Search results for "$(q)"</h1>'
-                       '<div class=nav><a href="/">back</a></div>'
-                       '<p>$(ndocids) post(s) are found.',
-                       ndocids=len(docids), q=q)
-        if self.maxdocs < len(docids):
-            docids = docids[:self.maxdocs]
-            yield Template('(Only $(maxdocs) posts are displayed.)',
-                           maxdocs=self.maxdocs)
-        yield '<hr><ol>'
-        for (docid,pid) in docids:
-            cur.execute('SELECT text FROM content WHERE docid = ?;', (docid,))
-            (text,) = cur.fetchone()
-            cur.execute('SELECT topic.title, topic.url, post.pid, '
-                        'post.page, post.date, post.username '
-                        'FROM post, topic '
-                        'WHERE post.pid = ? '
-                        'AND post.tid = topic.tid;', (pid,))
-            (title,url,pid,page,date,username) = cur.fetchone()
-            if page != 1:
-                url = urlparse.urljoin(url, 'page/%d' % page)
-            date = time.strftime('%F', time.gmtime(date))
-            pat = '|'.join( re.escape(w) for w in getwords(q) )
-            pat = re.compile(r'(%s)\s*' % pat, re.I)
-            text = highlight(pat, text)
-            yield Template(
-                '<li> '
-                '<span class=title><a href="$(url)#post-$(pid)">$(title)</a></span> '
-                '<span class=date>$(date)</span> '
-                'by <span class=username>$(username)</span> '
-                '<div class=text>$<text></div>\n',
-                docid=docid, text=text, url=url, title=title,
-                pid=pid, username=username, date=date)
-        yield '</ol><hr>'
-        yield ('<div class=nav><a href="/">back</a></div>'
-               '</body></html>')
+        q = q[:self.maxquerylength]
+        if q:
+            yield Template('<h1>Search results for "$(q)"</h1>\n', q=q)
+        else:
+            yield ('<h1>VGA Forum Search</h1>')
+        yield Template(
+            '<p><a href="http://videogamesawesome.com/forums/">back</a>',
+            '<form action="/"><p>Search: '
+            '<input name=q size="30" value="$(q)"> '
+            '<input type=submit></form>\n', q=q)
+        if q:
+            conn = sqlite3.connect(self.dbpath)
+            try:
+                cur = conn.cursor()
+                cur.execute('SELECT doc.docid, post.pid '
+                            'FROM content,doc,post '
+                            'WHERE content.text MATCH ? '
+                            'AND content.docid = doc.docid '
+                            'AND doc.pid = post.pid '
+                            'ORDER BY post.date DESC;', (q,))
+                docids = cur.fetchall()
+                yield Template('<p>$(ndocids) post(s) are found.\n',
+                               ndocids=len(docids), q=q)
+                if self.maxdocs < len(docids):
+                    docids = docids[:self.maxdocs]
+                    yield Template('(Only $(maxdocs) posts are displayed.)\n',
+                                   maxdocs=self.maxdocs)
+                yield '<hr><ol>\n'
+                for (docid,pid) in docids:
+                    cur.execute('SELECT text FROM content WHERE docid = ?;', (docid,))
+                    (text,) = cur.fetchone()
+                    cur.execute('SELECT topic.title, topic.url, post.pid, '
+                                'post.page, post.date, post.username '
+                                'FROM post, topic '
+                                'WHERE post.pid = ? '
+                                'AND post.tid = topic.tid;', (pid,))
+                    (title,url,pid,page,date,username) = cur.fetchone()
+                    if page != 1:
+                        url = urlparse.urljoin(url, 'page/%d' % page)
+                    date = time.strftime('%F', time.gmtime(date))
+                    pat = '|'.join( re.escape(w) for w in getwords(q) )
+                    pat = re.compile(r'(%s)\s*' % pat, re.I)
+                    text = highlight(pat, text)
+                    yield Template(
+                        '<li> '
+                        '<span class=title><a href="$(url)#post-$(pid)">$(title)</a></span> '
+                        '<span class=date>$(date)</span> '
+                        'by <span class=username>$(username)</span>\n'
+                        '<div class=text>$<text></div>\n',
+                        docid=docid, text=text, url=url, title=title,
+                        pid=pid, username=username, date=date)
+                yield '</ol><hr>\n'
+            except sqlite3.DatabaseError, e:
+                yield Template(
+                    '<p> Uh, oh. Something bad happened. :/\n'
+                    '<p> <span class=error>$(error)</span>\n',
+                    error=str(e))
+        yield ('</body></html>\n')
         return
 
 if __name__ == '__main__': sys.exit(main(VGAForumSearchApp(), sys.argv))
