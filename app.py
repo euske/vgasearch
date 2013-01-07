@@ -420,39 +420,51 @@ def highlight(pat, text, context=10, fmt='<span class=h>%s</span>', mid='...'):
 class VGAForumSearchApp(WebApp):
 
     dbpath = 'vgaforum.db'
-    maxquerylength = 30
+    maxquerysize = 30
     maxdocs = 100
 
     @GET('/')
     def index(self, q=''):
-        # initial page.
         import sqlite3
         import urlparse
         import time
         yield Response()
-        yield ('<html><body>\n'
+        yield ('<html><head>\n'
                '<style><!--\n'
                '.title { font-weight: bold; }\n'
                '.date { font-size: 80%; color: green; }\n'
+               '.help { font-size: 80%; }\n'
                '.username { font-weight: bold; }\n'
                '.error { font-weight: bold; color: red; }\n'
                '.text { font-size: 80%; margin-left: 2em; '
-               '  margin-top: 0.5em; margin-bottom: 0.5em; }\n'
+               'margin-top: 0.5em; margin-bottom: 0.5em; }\n'
                '.h { font-weight: bold; color: red; }\n'
                '--></style>\n')
-        q = q[:self.maxquerylength]
+        q = q[:self.maxquerysize]
         if q:
-            yield Template('<h1>Search results for "$(q)"</h1>\n', q=q)
+            yield Template(
+                '<title>VGA Forum Search - Search results for "$(q)"</title>\n'
+                '</head><body>\n'
+                '<h1>Search results for "$(q)"</h1>\n',
+                q=q)
         else:
-            yield ('<h1>VGA Forum Search</h1>')
+            yield Template(
+                '<title>VGA Forum Search</title>\n'
+                '</head><body>\n'
+                '<h1>VGA Forum Search</h1>\n'
+                )
         yield Template(
-            '<p><a href="http://videogamesawesome.com/forums/">back</a>',
-            '<form action="/"><p>Search: '
-            '<input name=q size="30" value="$(q)"> '
-            '<input type=submit></form>\n', q=q)
+            '<p><a href="http://videogamesawesome.com/forums/">To Forum</a>\n'
+            '<p><form action="/"><input name=q size="$(size)" value="$(q)"> '
+            '<input type=submit value="Search"> &nbsp; '
+            '<span class=help>(e.g. "<code>minecraft</code>", "<code>tf2 trad*</code>" '
+            'or "<code>fraser OR farshar</code>")</span>'
+            '</form>\n',
+            size=self.maxquerysize, q=q)
         if q:
-            conn = sqlite3.connect(self.dbpath)
+            yield '<hr>\n'
             try:
+                conn = sqlite3.connect(self.dbpath)
                 cur = conn.cursor()
                 cur.execute('SELECT doc.docid, post.pid '
                             'FROM content,doc,post '
@@ -467,7 +479,7 @@ class VGAForumSearchApp(WebApp):
                     docids = docids[:self.maxdocs]
                     yield Template('(Only $(maxdocs) posts are displayed.)\n',
                                    maxdocs=self.maxdocs)
-                yield '<hr><ol>\n'
+                yield '<ol>\n'
                 for (docid,pid) in docids:
                     cur.execute('SELECT text FROM content WHERE docid = ?;', (docid,))
                     (text,) = cur.fetchone()
@@ -491,12 +503,14 @@ class VGAForumSearchApp(WebApp):
                         '<div class=text>$<text></div>\n',
                         docid=docid, text=text, url=url, title=title,
                         pid=pid, username=username, date=date)
-                yield '</ol><hr>\n'
+                yield '</ol>\n'
+                yield '<p><a href="#">To Page Top</a>\n'
             except sqlite3.DatabaseError, e:
                 yield Template(
                     '<p> Uh, oh. Something bad happened. :/\n'
                     '<p> <span class=error>$(error)</span>\n',
                     error=str(e))
+            yield '<hr>\n'
         yield ('</body></html>\n')
         return
 
