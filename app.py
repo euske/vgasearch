@@ -388,7 +388,7 @@ def main(app, argv):
 ##
 
 # getwords(x): get words
-WORD = re.compile(r'\w+\s*|\S+\s*', re.U)
+WORD = re.compile(r'\w+\s*|[^\w\s]+\s*', re.U)
 def getwords(x):
     return WORD.findall(x)
 
@@ -436,8 +436,8 @@ class VGAForumSearchApp(WebApp):
                '.help { font-size: 80%; }\n'
                '.username { font-weight: bold; }\n'
                '.error { font-weight: bold; color: red; }\n'
-               '.text { font-size: 80%; margin-left: 2em; '
-               'margin-top: 0.5em; margin-bottom: 0.5em; }\n'
+               '.text { font-size: 80%; background: #eeeeee; '
+               'margin-left: 2em; margin-top: 0.5em; margin-bottom: 0.5em; }\n'
                '.h { font-weight: bold; color: red; }\n'
                '--></style>\n')
         q = q[:self.maxquerysize]
