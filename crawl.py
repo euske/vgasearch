@@ -105,7 +105,8 @@ class Crawler(object):
             k = x.get('class')
             if not k: continue
             if ('bbp-meta' in k):
-                date = getdate(x.contents[0])
+                spans = x.findAll('span')
+                date = getdate(spans[0].text)
             elif ('topic' in k) or ('reply' in k):
                 try:
                     if not x['id'].startswith('post-'): continue
