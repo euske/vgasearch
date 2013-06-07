@@ -26,10 +26,16 @@ def getdate(x):
         hh += 12
     return int(time.mktime((year,month,day,hh,mm,0,0,0,0)))
 
-def getcls(cls, elems):
+def getcls(x):
+    k = x.get('class')
+    if k:
+        return k.split(' ')
+    else:
+        return []
+
+def filtercls(cls, elems):
     for x in elems:
-        k = x.get('class')
-        if k and cls in k:
+        if cls in getcls(x):
             yield x
     return
 
@@ -82,8 +88,8 @@ class Crawler(object):
         print >>sys.stderr, 'getnpages: %r' % url
         soup = self.fetch(url)
         n = 1
-        for x in getcls('bbp-pagination-links', soup.findAll('div')):
-            for y in getcls('page-numbers', x.findAll('a')):
+        for x in filtercls('bbp-pagination-links', soup.findAll('div')):
+            for y in filtercls('page-numbers', x.findAll('a')):
                 try:
                     n = max(n, int(y.text))
                 except ValueError:
@@ -93,35 +99,42 @@ class Crawler(object):
     def getthreads(self, url):
         print >>sys.stderr, 'getthread: %r' % url
         soup = self.fetch(url)
-        for x in getcls('bbp-topic-permalink', soup.findAll('a')):
+        for x in filtercls('bbp-topic-permalink', soup.findAll('a')):
             yield (x['href'], unentify(x.text))
         return
 
     def getposts(self, url):
         print >>sys.stderr, 'getposts: %r' % url
         soup = self.fetch(url)
+        body = None
+        for body in soup.findAll('li'):
+            if 'bbp-body' in getcls(body): break
+        if body is None: return
+        pid = None
         date = None
-        for x in soup.findAll('div'):
-            k = x.get('class')
-            if not k: continue
-            if ('bbp-meta' in k):
-                spans = x.findAll('span')
+        for div in body.findAll('div', recursive=False):
+            cls = getcls(div)
+            if 'bbp-reply-header' in cls:
+                if div['id'].startswith('post-'):
+                    pid = int(div['id'][5:])
+                spans = div.findAll('span')
                 date = getdate(spans[0].text)
-            elif ('topic' in k) or ('reply' in k):
-                try:
-                    if not x['id'].startswith('post-'): continue
-                except KeyError:
-                    continue
-                pid = int(x['id'][5:])
-                divs = x.findAll('div', recursive=False)
-                if len(divs) < 2: continue
-                if 'bbp-reply-author' not in divs[0].get('class'): continue
+            elif ('topic' in cls) or ('reply' in cls):
+                for div in div.findAll('div', recursive=False):
+                    cls = getcls(div)
+                    if 'bbp-reply-author' in cls:
+                        for y in filtercls('bbp-author-name', div.findAll('a')):
+                            username = unentify(y.text)
+                    elif 'bbp-reply-content' in cls:
+                        text = []
+                        for y in div.findAll('p'):
+                            text.append(unentify(y.text))
+                if (pid is not None and date is not None and
+                    username is not None and text):
+                    yield (pid, date, username, '\n'.join(text))
+                pid = None
+                date = None
                 username = None
-                for y in getcls('bbp-author-name', divs[0].findAll('a')):
-                    username = unentify(y.text)
-                if 'bbp-reply-content' not in divs[1].get('class'): continue
-                text = unentify(divs[1].text)
-                yield (pid, date, username, text)
         return
 
     def run(self, url0):
