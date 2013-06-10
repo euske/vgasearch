@@ -112,7 +112,7 @@ class Crawler(object):
         if body is None: return
         pid = None
         date = None
-        for div in body.findAll('div', recursive=False):
+        for div in body.findAll('div', recursive=True):
             cls = getcls(div)
             if 'bbp-reply-header' in cls:
                 if div['id'].startswith('post-'):
@@ -128,7 +128,11 @@ class Crawler(object):
                     elif 'bbp-reply-content' in cls:
                         text = []
                         for y in div.findAll('p'):
-                            text.append(unentify(y.text))
+                            for z in y:
+                                if isinstance(z, basestring):
+                                    text.append(unentify(z))
+                                else:
+                                    text.append(unentify(z.text))
                 if (pid is not None and date is not None and
                     username is not None and text):
                     yield (pid, date, username, '\n'.join(text))
